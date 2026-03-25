@@ -14,6 +14,7 @@ public class ConnectionUI : MonoBehaviour
     {
         SaveNickname();
         NetworkManager.Singleton.StartHost();
+        gameObject.SetActive(false);
     }
 
     // Вызывается при нажатии кнопки Client
@@ -21,6 +22,7 @@ public class ConnectionUI : MonoBehaviour
     {
         SaveNickname();
         NetworkManager.Singleton.StartClient();
+        gameObject.SetActive(false);
     }
 
     private void SaveNickname()

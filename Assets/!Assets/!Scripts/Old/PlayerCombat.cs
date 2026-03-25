@@ -32,7 +32,7 @@ public class PlayerCombat : NetworkBehaviour
     }
     private PlayerNetwork FindOtherPlayer()
     {
-        // Исправленный доступ к спавн-менеджеру
+        // Доступ к спавн менеджеру
         foreach (var kvp in NetworkManager.Singleton.SpawnManager.SpawnedObjects)
         {
             NetworkObject obj = kvp.Value;
@@ -41,7 +41,7 @@ public class PlayerCombat : NetworkBehaviour
             PlayerNetwork player = obj.GetComponent<PlayerNetwork>();
             if (player != null && player != _playerNetwork)
             {
-                return player; // возвращаем первого подходящего
+                return player;
             }
         }
         return null;

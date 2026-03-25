@@ -3,8 +3,8 @@ using Unity.Netcode;
 
 public class PlayerAppearance : NetworkBehaviour
 {
-    [SerializeField] private Material _hostMaterial;   // красный для Host
-    [SerializeField] private Material _clientMaterial; // синий для Client
+    [SerializeField] private Material _hostMaterial;
+    [SerializeField] private Material _clientMaterial;
     private Renderer _renderer;
 
     private void Awake()
@@ -16,7 +16,6 @@ public class PlayerAppearance : NetworkBehaviour
     {
         if (_renderer == null) return;
 
-        // OwnerClientId == 0 соответствует Host (первый подключившийся)
         if (OwnerClientId == 0)
             _renderer.material = _hostMaterial;
         else

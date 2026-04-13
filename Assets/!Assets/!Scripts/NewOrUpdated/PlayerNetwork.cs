@@ -1,121 +1,97 @@
-using Unity.Collections;
-using Unity.Netcode;
+using FishNet.Object;
+using FishNet.Object.Synchronizing;
 using UnityEngine;
 using System.Collections;
 using System.Collections.Generic;
 
 public class PlayerNetwork : NetworkBehaviour
 {
-    public NetworkVariable<FixedString32Bytes> Nickname = new(
-        default,
-        NetworkVariableReadPermission.Everyone,
-        NetworkVariableWritePermission.Server
-    );
-
-    public NetworkVariable<int> HP = new(
-        100,
-        NetworkVariableReadPermission.Everyone,
-        NetworkVariableWritePermission.Server
-    );
-
-    public NetworkVariable<bool> IsAlive = new(
-        true,
-        NetworkVariableReadPermission.Everyone,
-        NetworkVariableWritePermission.Server
-    );
-
-    public NetworkVariable<int> Ammo = new(
-        10,
-        NetworkVariableReadPermission.Everyone,
-        NetworkVariableWritePermission.Server
-    );
+    public readonly SyncVar<string> Nickname = new SyncVar<string>("Player");
+    public readonly SyncVar<int> HP = new SyncVar<int>(100);
+    public readonly SyncVar<bool> IsAlive = new SyncVar<bool>(true);
+    public readonly SyncVar<int> Ammo = new SyncVar<int>(10);
 
     [SerializeField] private List<Transform> _spawnPoints;
 
-    public override void OnNetworkSpawn()
+    public override void OnStartNetwork()
     {
-        if(_spawnPoints == null || _spawnPoints.Count == 0)
+        base.OnStartNetwork();
+
+        // Подписка на изменения значений
+        Nickname.OnChange += OnNicknameChanged;
+        HP.OnChange += OnHpChanged;
+        IsAlive.OnChange += OnIsAliveChanged;
+        Ammo.OnChange += OnAmmoChanged;
+
+        if (_spawnPoints == null || _spawnPoints.Count == 0)
         {
             _spawnPoints = new List<Transform>();
-
             GameObject[] respawnObjects = GameObject.FindGameObjectsWithTag("Respawn");
             foreach (GameObject point in respawnObjects)
                 _spawnPoints.Add(point.transform);
         }
 
-
-        HP.OnValueChanged += OnHpChanged;
-        IsAlive.OnValueChanged += OnIsAliveChanged;
-
-        if (IsServer)
+        if (base.IsServerInitialized)
         {
-            Ammo.Value = 10; // максимальное количество патронов
-
+            Ammo.Value = 10;
             if (_spawnPoints.Count > 0)
-            {
-                int idx = Random.Range(0, _spawnPoints.Count);
-                transform.position = _spawnPoints[idx].position;
-            }
+                transform.position = _spawnPoints[Random.Range(0, _spawnPoints.Count)].position;
             else
-            {
                 transform.position = Vector3.zero;
-            }
         }
 
-        if (IsOwner)
-        {
-            SubmitNicknameServerRpc(ConnectionUI.PlayerNickname);
-        }
+        if (base.Owner.IsLocalClient)
+            SetNicknameServer(ConnectionUI.PlayerNickname);
 
-        if (OwnerClientId != 0)
+        if (base.OwnerId != 0)
             transform.Rotate(Vector3.up, 180);
-
     }
 
-    public override void OnNetworkDespawn()
+    public override void OnStopNetwork()
     {
-        HP.OnValueChanged -= OnHpChanged;
-        IsAlive.OnValueChanged -= OnIsAliveChanged;
+        base.OnStopNetwork();
+
+        Nickname.OnChange -= OnNicknameChanged;
+        HP.OnChange -= OnHpChanged;
+        IsAlive.OnChange -= OnIsAliveChanged;
+        Ammo.OnChange -= OnAmmoChanged;
     }
 
-    private void OnHpChanged(int prev, int next)
+    private void OnNicknameChanged(string oldValue, string newValue, bool asServer)
     {
-        if (!IsServer) return;
+        // UI обновляется в PlayerView
+    }
 
-        if (next <= 0 && IsAlive.Value)
+    private void OnHpChanged(int oldValue, int newValue, bool asServer)
+    {
+        if (!asServer) return;
+        if (newValue <= 0 && IsAlive.Value)
         {
             IsAlive.Value = false;
             StartCoroutine(RespawnRoutine());
         }
     }
 
-    private void OnIsAliveChanged(bool prev, bool next)
+    private void OnIsAliveChanged(bool oldValue, bool newValue, bool asServer)
     {
-        if (next == false)
-        {
+        if (!newValue)
             HidePlayer();
-        }
         else
-        {
             ShowPlayer();
-        }
     }
+
+    private void OnAmmoChanged(int oldValue, int newValue, bool asServer) { }
 
     private void HidePlayer()
     {
-        CharacterController cc = GetComponent<CharacterController>();
-        if (cc != null)
-        {
+        if (TryGetComponent<CharacterController>(out var cc))
             cc.enabled = false;
-        }
     }
+
     private void ShowPlayer()
     {
-        CharacterController cc = GetComponent<CharacterController>();
-        if (cc != null)
-        {
+        if (TryGetComponent<CharacterController>(out var cc))
             cc.enabled = true;
-        }
     }
 
     private IEnumerator RespawnRoutine()
@@ -125,28 +101,47 @@ public class PlayerNetwork : NetworkBehaviour
         int idx = Random.Range(0, _spawnPoints.Count);
         Vector3 newPosition = _spawnPoints[idx].transform.position;
 
-        TPPlayerClientRpc(newPosition);
+        // Телепортируем на сервере
+        if (base.IsServerInitialized)
+        {
+            transform.position = newPosition;
+
+            if (TryGetComponent<CharacterController>(out var cc))
+            {
+                cc.enabled = false;
+                cc.enabled = true;
+            }
+        }
+
+        // Отправляем RPC всем клиентам
+        TeleportPlayerObservers(newPosition);
 
         HP.Value = 100;
         Ammo.Value = 10;
         IsAlive.Value = true;
     }
 
-    [ClientRpc]
-    private void TPPlayerClientRpc(Vector3 spawnPosition)
+    [ObserversRpc(BufferLast = true)]
+    private void TeleportPlayerObservers(Vector3 spawnPosition)
     {
-        if (IsOwner)
+        if (!base.IsServerInitialized)
         {
             transform.position = spawnPosition;
+            if (TryGetComponent<CharacterController>(out var cc))
+            {
+                cc.enabled = false;
+                cc.enabled = true;
+            }
         }
     }
 
-
     [ServerRpc(RequireOwnership = false)]
-    private void SubmitNicknameServerRpc(string nickname)
+    private void SetNicknameServer(string nickname)
     {
-        string safeValue = string.IsNullOrWhiteSpace(nickname) ? $"Player_{OwnerClientId}" : nickname.Trim();
-        if (safeValue.Length > 31) safeValue = safeValue.Substring(0, 31);
-        Nickname.Value = new FixedString32Bytes(safeValue);
+        string safeValue = string.IsNullOrWhiteSpace(nickname)
+            ? $"Player_{OwnerId}"
+            : nickname.Trim();
+        if (safeValue.Length > 31) safeValue = safeValue[..31];
+        Nickname.Value = safeValue;
     }
 }

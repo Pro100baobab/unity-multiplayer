@@ -1,4 +1,4 @@
-using Unity.Netcode;
+using FishNet.Object;
 using UnityEngine;
 
 public class PlayerShooting : NetworkBehaviour
@@ -11,30 +11,26 @@ public class PlayerShooting : NetworkBehaviour
     private float _lastShotTime;
     private PlayerNetwork _playerNetwork;
 
-    public override void OnNetworkSpawn()
+    public override void OnStartNetwork()
     {
+        base.OnStartNetwork();
         _playerNetwork = GetComponent<PlayerNetwork>();
 
-        if (IsServer)
-        {
+        if (base.IsServerInitialized)
             _playerNetwork.Ammo.Value = _maxAmmo;
-        }
     }
 
     private void Update()
     {
-        if (!IsOwner) return;
-
+        if (!base.IsOwner) return;
         if (!_playerNetwork.IsAlive.Value) return;
+        if (!Input.GetKeyDown(KeyCode.Space)) return;
 
-        if (Input.GetKeyDown(KeyCode.Space))
-        {
-            ShootServerRpc(_firePoint.position, _firePoint.forward);
-        }
+        ShootServer(_firePoint.position, _firePoint.forward);
     }
 
     [ServerRpc]
-    private void ShootServerRpc(Vector3 pos, Vector3 dir, ServerRpcParams rpc = default)
+    private void ShootServer(Vector3 pos, Vector3 dir)
     {
         if (_playerNetwork.HP.Value <= 0) return;
         if (_playerNetwork.Ammo.Value <= 0) return;
@@ -43,13 +39,9 @@ public class PlayerShooting : NetworkBehaviour
         _lastShotTime = Time.time;
         _playerNetwork.Ammo.Value--;
 
-        var go = Instantiate(_projectilePrefab, pos + dir * 1.2f, Quaternion.LookRotation(dir));
-        var no = go.GetComponent<NetworkObject>();
-        no.SpawnWithOwnership(rpc.Receive.SenderClientId);
+        GameObject go = Instantiate(_projectilePrefab, pos + dir * 1.2f, Quaternion.LookRotation(dir));
+        base.Spawn(go, base.Owner); // передаём владельца
     }
 
-    public int GetCurrentAmmo()
-    {
-        return _playerNetwork != null ? _playerNetwork.Ammo.Value : 0;
-    }
+    public int GetCurrentAmmo() => _playerNetwork != null ? _playerNetwork.Ammo.Value : 0;
 }

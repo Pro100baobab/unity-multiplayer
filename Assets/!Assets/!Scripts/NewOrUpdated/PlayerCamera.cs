@@ -1,23 +1,22 @@
-using Unity.Netcode;
+using FishNet.Object;
 using UnityEngine;
 
 public class PlayerCamera : NetworkBehaviour
 {
     [SerializeField] private Vector3 _offset = new(0f, 2f, -6f);
-
     private Camera _cam;
+    private bool _isLocal;
 
-    public override void OnNetworkSpawn()
+    public override void OnStartNetwork()
     {
-        if (!IsOwner)
+        base.OnStartNetwork();
+        _isLocal = base.Owner.IsLocalClient;
+        if (!_isLocal)
         {
             enabled = false;
             return;
         }
-
         _cam = Camera.main;
-        if (_cam == null)
-            Debug.LogWarning("Main Camera not found!");
     }
 
     private void LateUpdate()

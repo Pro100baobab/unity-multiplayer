@@ -1,5 +1,5 @@
 using TMPro;
-using Unity.Netcode;
+using FishNet.Object;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -8,9 +8,11 @@ public class PlayerUIHandler : NetworkBehaviour
     [SerializeField] private TMP_Text _ammoText;
     [SerializeField] private TMP_Text _respawnTimerText;
     [SerializeField] private Image _ammoImage;
+
     private PlayerShooting _shooting;
     private PlayerNetwork _playerNetwork;
     private float _deathTime;
+    private bool _isLocal;
 
     private void Awake()
     {
@@ -18,47 +20,50 @@ public class PlayerUIHandler : NetworkBehaviour
         _playerNetwork = GetComponent<PlayerNetwork>();
     }
 
-    public override void OnNetworkSpawn()
+    public override void OnStartNetwork()
     {
-        if (!IsOwner)
+        base.OnStartNetwork();
+        _isLocal = base.Owner.IsLocalClient;
+
+        if (!_isLocal)
         {
             enabled = false;
-            _ammoText.gameObject.SetActive(false);
-            _ammoImage.gameObject.SetActive(false);
+            if (_ammoText) _ammoText.gameObject.SetActive(false);
+            if (_ammoImage) _ammoImage.gameObject.SetActive(false);
             return;
         }
 
-        if (_playerNetwork != null)
-        {
-            _playerNetwork.Ammo.OnValueChanged += OnAmmoChanged;
-            _playerNetwork.IsAlive.OnValueChanged += OnIsAliveChanged;
-            OnAmmoChanged(0, _playerNetwork.Ammo.Value);
-        }
+        // Подписка на изменения SyncVar
+        _playerNetwork.Ammo.OnChange += OnAmmoChanged;
+        _playerNetwork.IsAlive.OnChange += OnIsAliveChanged;
+
+        // Начальные значения
+        UpdateAmmo(_playerNetwork.Ammo.Value);
+        _deathTime = Time.time;
     }
 
-    public override void OnNetworkDespawn()
+    public override void OnStopNetwork()
     {
-        if (_playerNetwork != null && IsOwner)
+        base.OnStopNetwork();
+        if (_playerNetwork != null)
         {
-            _playerNetwork.IsAlive.OnValueChanged -= OnIsAliveChanged;
-            _playerNetwork.Ammo.OnValueChanged -= OnAmmoChanged;
+            _playerNetwork.Ammo.OnChange -= OnAmmoChanged;
+            _playerNetwork.IsAlive.OnChange -= OnIsAliveChanged;
         }
     }
 
     private void Update()
     {
-        if (!IsOwner) return;
+        if (!_isLocal) return;
 
         if (_shooting != null && _ammoText != null)
             _ammoText.text = $"{_shooting.GetCurrentAmmo()}";
-
 
         if (_playerNetwork != null && !_playerNetwork.IsAlive.Value && _respawnTimerText != null)
         {
             float elapsed = Time.time - _deathTime;
             float remaining = Mathf.Max(0, 3f - elapsed);
             _respawnTimerText.text = $"Respawn: {remaining:F1}s";
-            if (remaining <= 0) _respawnTimerText.text = "";
         }
         else if (_respawnTimerText != null)
         {
@@ -66,17 +71,18 @@ public class PlayerUIHandler : NetworkBehaviour
         }
     }
 
-    private void OnIsAliveChanged(bool prev, bool next)
+    private void OnIsAliveChanged(bool oldValue, bool newValue, bool asServer)
     {
-        if (!next)
-        {
-            _deathTime = Time.time;
-        }
+        if (!newValue) _deathTime = Time.time;
     }
 
-    private void OnAmmoChanged(int oldValue, int newValue)
+    private void OnAmmoChanged(int oldValue, int newValue, bool asServer)
     {
-        if (_ammoText != null)
-            _ammoText.text = $"{newValue}";
+        UpdateAmmo(newValue);
+    }
+
+    private void UpdateAmmo(int ammo)
+    {
+        if (_ammoText != null) _ammoText.text = $"{ammo}";
     }
 }

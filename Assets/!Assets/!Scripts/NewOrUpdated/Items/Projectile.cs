@@ -1,4 +1,4 @@
-using Unity.Netcode;
+using FishNet.Object;
 using UnityEngine;
 
 public class Projectile : NetworkBehaviour
@@ -13,16 +13,13 @@ public class Projectile : NetworkBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
-        if (!IsServer) return;
+        if (!base.IsServerInitialized) return;
 
         var target = other.GetComponent<PlayerNetwork>();
         if (target == null) return;
+        if (target.OwnerId == base.OwnerId) return;
 
-        if (target.OwnerClientId == OwnerClientId) return;
-
-        int newHp = Mathf.Max(0, target.HP.Value - _damage);
-        target.HP.Value = newHp;
-
-        NetworkObject.Despawn(destroy: true);
+        target.HP.Value = Mathf.Max(0, target.HP.Value - _damage);
+        base.Despawn(gameObject);
     }
 }

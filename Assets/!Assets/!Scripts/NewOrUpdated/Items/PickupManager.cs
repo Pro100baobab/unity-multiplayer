@@ -1,4 +1,4 @@
-using Unity.Netcode;
+using FishNet;
 using UnityEngine;
 using System.Collections;
 
@@ -7,12 +7,11 @@ public class PickupManager : MonoBehaviour
     [SerializeField] private GameObject _healthPickupPrefab;
     [SerializeField] private Transform[] _spawnPoints;
     [SerializeField] private float _respawnDelay = 10f;
-
     private bool _spawned = false;
 
     private void Update()
     {
-        if (!_spawned && NetworkManager.Singleton.IsServer)
+        if (!_spawned && InstanceFinder.IsServer)
         {
             _spawned = true;
             SpawnAll();
@@ -38,9 +37,8 @@ public class PickupManager : MonoBehaviour
 
     private void SpawnPickup(Vector3 position)
     {
-        var go = Instantiate(_healthPickupPrefab, position, Quaternion.identity);
-        var pickup = go.GetComponent<HealthPickup>();
-        pickup.Init(this);
-        go.GetComponent<NetworkObject>().Spawn();
+        GameObject go = Instantiate(_healthPickupPrefab, position, Quaternion.identity);
+        go.GetComponent<HealthPickup>().Init(this);
+        InstanceFinder.ServerManager.Spawn(go);
     }
 }

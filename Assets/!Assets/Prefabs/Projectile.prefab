@@ -157,7 +157,7 @@ MonoBehaviour:
   _addedNetworkObject: {fileID: 703905025155297763}
   _networkObjectCache: {fileID: 0}
   _speed: 18
-  _damage: 20
+  _damage: 34
 --- !u!114 &703905025155297763
 MonoBehaviour:
   m_ObjectHideFlags: 0

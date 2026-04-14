@@ -19,6 +19,9 @@ public class Projectile : NetworkBehaviour
         if (target == null) return;
         if (target.OwnerId == base.OwnerId) return;
 
+        // Сообщаем цели, кто её атаковал
+        target.SetLastAttacker(base.Owner);
+
         target.HP.Value = Mathf.Max(0, target.HP.Value - _damage);
         base.Despawn(gameObject);
     }

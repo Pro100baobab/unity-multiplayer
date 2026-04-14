@@ -76,6 +76,9 @@ public class PlayerMovementCSP : NetworkBehaviour
     [Reconcile]
     private void Reconcile(PlayerReconcileData rd, Channel channel = Channel.Unreliable)
     {
+        // Если в консоли клиента появятся эти сообщения при движении другого игрока, значит, данные приходят, но не применяются. 
+        Debug.Log($"[Reconcile] Applying position {rd.Position} for object {gameObject.name}, IsOwner={IsOwner}");
+
         transform.position = rd.Position;
         _verticalVelocity = rd.VerticalVelocity;
     }

@@ -22,14 +22,20 @@ public class PlayerMovementCSP : NetworkBehaviour
     public override void OnStartNetwork()
     {
         base.OnStartNetwork();
-        base.TimeManager.OnTick += OnTick;
+        TimeManager.OnTick += OnTick;
+        TimeManager.OnPostTick += OnPostTick;
     }
+
 
     public override void OnStopNetwork()
     {
         base.OnStopNetwork();
-        if (base.TimeManager != null)
-            base.TimeManager.OnTick -= OnTick;
+
+        if (TimeManager != null)
+        {
+            TimeManager.OnTick -= OnTick;
+            TimeManager.OnPostTick -= OnPostTick;
+        }
     }
 
     private void OnTick()
@@ -37,15 +43,32 @@ public class PlayerMovementCSP : NetworkBehaviour
         if (_playerNetwork != null && !_playerNetwork.IsAlive.Value)
             return;
 
-        if (base.IsOwner)
+        PlayerMoveData md = default;
+
+        if (IsOwner)
         {
-            PlayerMoveData moveData = new PlayerMoveData
-            {
-                Horizontal = Input.GetAxisRaw("Horizontal"),
-                Vertical = Input.GetAxisRaw("Vertical")
-            };
-            Replicate(moveData);
+            md.Horizontal = Input.GetAxisRaw("Horizontal");
+            md.Vertical = Input.GetAxisRaw("Vertical");
         }
+
+        Replicate(md);
+    }
+
+    private void OnPostTick()
+    {
+        CreateReconcile();
+    }
+
+    [Replicate]
+    private void Replicate(PlayerMoveData md, ReplicateState state = ReplicateState.Invalid, Channel channel = Channel.Unreliable)
+    {
+        Vector3 move = new Vector3(md.Horizontal, 0f, md.Vertical).normalized;
+        move *= _speed;
+
+        _verticalVelocity += _gravity * (float)TimeManager.TickDelta;
+        move.y = _verticalVelocity;
+
+        _cc.Move(move * (float)TimeManager.TickDelta);
     }
 
     public override void CreateReconcile()
@@ -55,31 +78,23 @@ public class PlayerMovementCSP : NetworkBehaviour
             Position = transform.position,
             VerticalVelocity = _verticalVelocity
         };
+
         Reconcile(rd);
     }
 
-    [Replicate]
-    private void Replicate(PlayerMoveData md, ReplicateState state = ReplicateState.Invalid, Channel channel = Channel.Unreliable)
+    public void ResetState()
     {
-        Vector3 move = new Vector3(md.Horizontal, 0f, md.Vertical).normalized;
-        move *= _speed;
-
-        _verticalVelocity += _gravity * (float)base.TimeManager.TickDelta;
-        move.y = _verticalVelocity;
-
-        _cc.Move(move * (float)base.TimeManager.TickDelta);
-
-        if (_cc.isGrounded)
-            _verticalVelocity = 0f;
+        _verticalVelocity = 0f;
     }
 
     [Reconcile]
     private void Reconcile(PlayerReconcileData rd, Channel channel = Channel.Unreliable)
     {
-        // Если в консоли клиента появятся эти сообщения при движении другого игрока, значит, данные приходят, но не применяются. 
-        Debug.Log($"[Reconcile] Applying position {rd.Position} for object {gameObject.name}, IsOwner={IsOwner}");
+        _cc.enabled = false;
 
         transform.position = rd.Position;
         _verticalVelocity = rd.VerticalVelocity;
+
+        _cc.enabled = true;
     }
 }

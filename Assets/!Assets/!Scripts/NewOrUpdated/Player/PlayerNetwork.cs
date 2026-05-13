@@ -110,40 +110,26 @@ public class PlayerNetwork : NetworkBehaviour
         yield return new WaitForSeconds(3f);
 
         int idx = Random.Range(0, _spawnPoints.Count);
-        Vector3 newPosition = _spawnPoints[idx].transform.position;
+        Vector3 newPosition = _spawnPoints[idx].position;
 
-        // Телепортируем на сервере
-        if (base.IsServerInitialized)
+        if (TryGetComponent<CharacterController>(out var cc))
+            cc.enabled = false;
+
+        // Сервер меняет позицию
+        transform.position = newPosition;
+
+        // Сбрасываем velocity prediction
+        if (TryGetComponent<PlayerMovementCSP>(out var movement))
         {
-            transform.position = newPosition;
-
-            if (TryGetComponent<CharacterController>(out var cc))
-            {
-                cc.enabled = false;
-                cc.enabled = true;
-            }
+            movement.ResetState();
         }
 
-        // Отправляем RPC всем клиентам
-        TeleportPlayerObservers(newPosition);
+        if (TryGetComponent<CharacterController>(out var cc2))
+            cc2.enabled = true;
 
         HP.Value = 100;
         Ammo.Value = 10;
         IsAlive.Value = true;
-    }
-
-    [ObserversRpc(BufferLast = true)]
-    private void TeleportPlayerObservers(Vector3 spawnPosition)
-    {
-        if (!base.IsServerInitialized)
-        {
-            transform.position = spawnPosition;
-            if (TryGetComponent<CharacterController>(out var cc))
-            {
-                cc.enabled = false;
-                cc.enabled = true;
-            }
-        }
     }
 
     [ServerRpc(RequireOwnership = false)]
@@ -155,14 +141,6 @@ public class PlayerNetwork : NetworkBehaviour
         if (safeValue.Length > 31) safeValue = safeValue[..31];
         Nickname.Value = safeValue;
     }
-
-    /*
-    // Метод для установки атакующего (вызывается из Projectile)
-    [ServerRpc(RequireOwnership = false)]
-    public void SetLastAttacker(NetworkConnection attacker)
-    {
-        _lastAttacker = attacker;
-    }*/
 
     public void SetLastAttacker(NetworkConnection attacker)
     {

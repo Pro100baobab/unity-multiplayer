@@ -7,23 +7,34 @@ public class PickupManager : MonoBehaviour
     [SerializeField] private GameObject _healthPickupPrefab;
     [SerializeField] private Transform[] _spawnPoints;
     [SerializeField] private float _respawnDelay = 10f;
-    private bool _spawned = false;
 
-    private void Update()
+    private bool _spawned;
+
+    private void Start()
     {
-        if (InstanceFinder.IsServer)
-        {
-            Invoke(nameof(SpawnAll), 0.1f);
-        }
+        Debug.Log("стартуем и запускаем коррутину");
+
+        StartCoroutine(WaitAndSpawn());
     }
 
-    private void SpawnAll()
+    private IEnumerator WaitAndSpawn()
     {
-        if (_spawned) return;
-        
+        // Ждём пока сервер стартует
+        yield return new WaitUntil(() =>
+            InstanceFinder.ServerManager != null &&
+            InstanceFinder.ServerManager.Started);
+
+        if (_spawned)
+            yield break;
+
         _spawned = true;
-        foreach (var point in _spawnPoints)
+
+        foreach (Transform point in _spawnPoints)
+        {
+            Debug.Log("запустили цикл спавна");
+
             SpawnPickup(point.position);
+        }
     }
 
     public void OnPickedUp(Vector3 position)
@@ -41,6 +52,9 @@ public class PickupManager : MonoBehaviour
     {
         GameObject go = Instantiate(_healthPickupPrefab, position, Quaternion.identity);
         go.GetComponent<HealthPickup>().Init(this);
+
         InstanceFinder.ServerManager.Spawn(go);
+
+        Debug.Log("Создали объект");
     }
 }

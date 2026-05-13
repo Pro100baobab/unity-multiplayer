@@ -110,7 +110,8 @@ public class GameManager : NetworkBehaviour
     {
         if (!IsServerInitialized) return;
 
-        ConnectedPlayers.Value = ServerManager.Clients.Count;
+        // Даём FishNet обновить Clients dictionary
+        Invoke(nameof(RecalculatePlayerCount), 0.1f);
 
         if (args.ConnectionState == RemoteConnectionState.Started)
         {
@@ -127,10 +128,21 @@ public class GameManager : NetworkBehaviour
                 PlayerScores.Remove(conn.ClientId);
         }
 
-        // Проверяем условие старта матча
-        if (CurrentState.Value == GameState.WaitingForPlayers && ConnectedPlayers.Value >= _requiredPlayers)
+        // Проверка старта матча переносится
+        Invoke(nameof(CheckMatchStart), 0.2f);
+    }
+
+    private void CheckMatchStart()
+    {
+        if (!IsServerInitialized)
+            return;
+
+        if (CurrentState.Value != GameState.WaitingForPlayers)
+            return;
+
+        if (ConnectedPlayers.Value >= _requiredPlayers)
         {
-            Invoke(nameof(StartMatch), 0.2f);
+            StartMatch();
         }
     }
 
@@ -164,6 +176,7 @@ public class GameManager : NetworkBehaviour
 
         // Сбрасываем счёт всех игроков
         var clients = new List<NetworkConnection>(ServerManager.Clients.Values);
+        
         foreach (var conn in clients)
         {
             if (PlayerScores.ContainsKey(conn.ClientId))
@@ -176,6 +189,8 @@ public class GameManager : NetworkBehaviour
         CurrentState.Value = GameState.WaitingForPlayers;
 
         Debug.Log("[GameManager] Lobby reset. Waiting for players...");
+
+        Invoke(nameof(CheckMatchStart), 0.2f);
     }
 
     private void ResetPlayerState(NetworkConnection conn)
@@ -191,9 +206,7 @@ public class GameManager : NetworkBehaviour
         }
     }
 
-    // RPC для начисления очков
 
-    [ServerRpc(RequireOwnership = false)]
     public void AddScore(NetworkConnection playerConn)
     {
         if (!IsServerInitialized) return;
@@ -206,6 +219,11 @@ public class GameManager : NetworkBehaviour
             PlayerScores[clientId]++;
             Debug.Log($"[GameManager] Player {clientId} score: {PlayerScores[clientId]}");
         }
+    }
+
+    private void RecalculatePlayerCount()
+    {
+        ConnectedPlayers.Value = ServerManager.Clients.Count;
     }
 
     // RPC для уведомления клиентов
